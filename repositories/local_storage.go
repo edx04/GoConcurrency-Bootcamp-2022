@@ -32,10 +32,12 @@ func (l LocalStorage) Write(pokemons []models.Pokemon) error {
 
 func (l LocalStorage) Read() ([]models.Pokemon, error) {
 	file, fErr := os.Open(filePath)
-	defer file.Close()
+
 	if fErr != nil {
 		return nil, fErr
 	}
+
+	defer file.Close()
 
 	r := csv.NewReader(file)
 	records, rErr := r.ReadAll()
