@@ -30,31 +30,86 @@ func NewRefresher(reader reader, saver saver, fetcher fetcher) Refresher {
 }
 
 func (r Refresher) Refresh(ctx context.Context) error {
-	pokemons, err := r.Read()
-	if err != nil {
-		return err
+
+	out := r.generator()
+	abilityOut := r.ability(out)
+	pokemons := []models.Pokemon{}
+	for p := range abilityOut {
+		pokemons = append(pokemons, p)
 	}
+	// i := 0
+	// for p := range out {
+	// 	urls := strings.Split(p.FlatAbilityURLs, "|")
+	// 	var abilities []string
+	// 	for _, url := range urls {
+	// 		ability, err := r.FetchAbility(url)
+	// 		if err != nil {
+	// 			return err
+	// 		}
 
-	for i, p := range pokemons {
-		urls := strings.Split(p.FlatAbilityURLs, "|")
-		var abilities []string
-		for _, url := range urls {
-			ability, err := r.FetchAbility(url)
-			if err != nil {
-				return err
-			}
+	// 		for _, ee := range ability.EffectEntries {
+	// 			abilities = append(abilities, ee.Effect)
+	// 		}
+	// 	}
 
-			for _, ee := range ability.EffectEntries {
-				abilities = append(abilities, ee.Effect)
-			}
-		}
-
-		pokemons[i].EffectEntries = abilities
-	}
+	// 	pokemons[i].EffectEntries = abilities
+	// 	i++
+	// }
 
 	if err := r.Save(ctx, pokemons); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (r Refresher) generator() <-chan models.Pokemon {
+	out := make(chan models.Pokemon)
+
+	go func() {
+		pokemons, err := r.Read()
+
+		if err != nil {
+			panic(err)
+		}
+
+		for _, pokemon := range pokemons {
+			out <- pokemon
+		}
+
+		defer close(out)
+
+	}()
+
+	return out
+
+}
+
+func (r Refresher) ability(pokemons <-chan models.Pokemon) <-chan models.Pokemon {
+	out := make(chan models.Pokemon)
+
+	go func() {
+		for p := range pokemons {
+			urls := strings.Split(p.FlatAbilityURLs, "|")
+			var abilities []string
+			for _, url := range urls {
+				ability, err := r.FetchAbility(url)
+				if err != nil {
+					panic(err)
+				}
+
+				for _, ee := range ability.EffectEntries {
+					abilities = append(abilities, ee.Effect)
+				}
+			}
+			p.EffectEntries = abilities
+
+			out <- p
+
+		}
+		close(out)
+	}()
+
+	return out
+
 }
