@@ -1,7 +1,9 @@
 package use_cases
 
 import (
+	"context"
 	"strings"
+	"sync"
 
 	"GoConcurrency-Bootcamp-2022/models"
 )
@@ -19,10 +21,10 @@ type Fetcher struct {
 	storage writer
 }
 
-// type result struct {
-// 	Error   error
-// 	Pokemon models.Pokemon
-// }
+type result struct {
+	Error   error
+	Pokemon models.Pokemon
+}
 
 func NewFetcher(api api, storage writer) Fetcher {
 	return Fetcher{api, storage}
@@ -30,69 +32,34 @@ func NewFetcher(api api, storage writer) Fetcher {
 
 func (f Fetcher) Fetch(from, to int) error {
 	var pokemons []models.Pokemon
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := f.workerPool(ctx, from, to)
 
-	ch := f.generator(from, to)
-
-	for i := from; i < to; i++ {
-		result := <-ch
-		pokemons = append(pokemons, result)
-	}
-
-	// for result := range ch {
-	// 	if result.Error != nil {
-	// 		cancel()
-	// 		return result.Error
-	// 	}
-	// 	pokemons = append(pokemons, result.Pokemon)
+	// for i := from; i < to; i++ {
+	// 	result := <-ch
+	// 	pokemons = append(pokemons, result)
 	// }
+
+	for result := range ch {
+		if result.Error != nil {
+			cancel()
+			return result.Error
+		}
+		pokemons = append(pokemons, result.Pokemon)
+	}
 
 	return f.storage.Write(pokemons)
 }
 
-// func (f Fetcher) generator(ctx context.Context, from, to int) <-chan result {
-// 	ch := make(chan result)
-// 	wg := sync.WaitGroup{}
-// 	for id := from; id <= to; id++ {
-// 		wg.Add(1)
+func (f Fetcher) workerPool(ctx context.Context, from, to int) <-chan result {
+	ch := make(chan result)
+	wg := sync.WaitGroup{}
+	for id := from; id <= to; id++ {
+		wg.Add(1)
 
-// 		go func(ctx context.Context, i int) {
-// 			defer wg.Done()
-// 			pokemon, err := f.api.FetchPokemon(i)
-// 			if err == nil {
-// 				var flatAbilities []string
-// 				for _, t := range pokemon.Abilities {
-// 					flatAbilities = append(flatAbilities, t.Ability.URL)
-// 				}
-// 				pokemon.FlatAbilityURLs = strings.Join(flatAbilities, "|")
-
-// 			}
-
-// 			res := result{Error: err, Pokemon: pokemon}
-
-// 			select {
-// 			case <-ctx.Done():
-// 				return
-// 			case ch <- res:
-// 			}
-
-// 		}(ctx, id)
-// 	}
-
-// 	go func() {
-// 		wg.Wait()
-// 		close(ch)
-// 	}()
-
-// 	return ch
-
-// }
-
-func (f Fetcher) generator(from, to int) <-chan models.Pokemon {
-	ch := make(chan models.Pokemon)
-
-	go func() {
-		for id := from; id <= to; id++ {
-			pokemon, err := f.api.FetchPokemon(id)
+		go func(ctx context.Context, i int) {
+			defer wg.Done()
+			pokemon, err := f.api.FetchPokemon(i)
 			if err == nil {
 				var flatAbilities []string
 				for _, t := range pokemon.Abilities {
@@ -102,10 +69,45 @@ func (f Fetcher) generator(from, to int) <-chan models.Pokemon {
 
 			}
 
-			ch <- pokemon
+			res := result{Error: err, Pokemon: pokemon}
 
-		}
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- res:
+			}
 
+		}(ctx, id)
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
 	}()
+
 	return ch
+
 }
+
+// func (f Fetcher) generator(from, to int) <-chan models.Pokemon {
+// 	ch := make(chan models.Pokemon)
+
+// 	go func() {
+// 		for id := from; id <= to; id++ {
+// 			pokemon, err := f.api.FetchPokemon(id)
+// 			if err == nil {
+// 				var flatAbilities []string
+// 				for _, t := range pokemon.Abilities {
+// 					flatAbilities = append(flatAbilities, t.Ability.URL)
+// 				}
+// 				pokemon.FlatAbilityURLs = strings.Join(flatAbilities, "|")
+
+// 			}
+
+// 			ch <- pokemon
+
+// 		}
+
+// 	}()
+// 	return ch
+// }
