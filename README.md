@@ -1,5 +1,11 @@
 # GoConcurrency-Bootcamp-2022
- 
+
+
+## Results
+|type | Generator (100 ids) | Fan in - Fan-out (40 records)|
+| --- | --- | --- |
+|Without concurrency    |45.550643532s | 18.140085354s |
+|Concurrency |1.040912392s| 6.519899266s |
 ## Introduction
  
 Thank you for participating in the GO Concurrency Bootcamp.
