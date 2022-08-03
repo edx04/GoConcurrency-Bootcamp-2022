@@ -30,18 +30,23 @@ func NewRefresher(reader reader, saver saver, fetcher fetcher) Refresher {
 	return Refresher{reader, saver, fetcher}
 }
 
-func (r Refresher) Refresh(ctx context.Context) error {
+func (r Refresher) Refresh(ctx context.Context, workers int) error {
 
 	out := r.generator(ctx)
 
-	//Fan Out
-	abilityOut := r.ability(out)
-	abilityOut2 := r.ability(out)
-	abilityOut3 := r.ability(out)
+	// abilityOut := r.ability(out)
+	// abilityOut2 := r.ability(out)
+	// abilityOut3 := r.ability(out)
 	pokemons := []models.Pokemon{}
 
+	//Fan Out
+	ability := []<-chan models.Pokemon{}
+
+	for i := 0; i < workers; i++ {
+		ability = append(ability, r.ability(out))
+	}
 	//Fan In
-	for p := range fanIn(abilityOut, abilityOut2, abilityOut3) {
+	for p := range fanIn(ability...) {
 		pokemons = append(pokemons, p)
 	}
 
