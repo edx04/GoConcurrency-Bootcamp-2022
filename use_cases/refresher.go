@@ -32,7 +32,7 @@ func NewRefresher(reader reader, saver saver, fetcher fetcher) Refresher {
 
 func (r Refresher) Refresh(ctx context.Context) error {
 
-	out := r.generator()
+	out := r.generator(ctx)
 
 	//Fan Out
 	abilityOut := r.ability(out)
@@ -52,21 +52,16 @@ func (r Refresher) Refresh(ctx context.Context) error {
 	return nil
 }
 
-func (r Refresher) generator() <-chan models.Pokemon {
+func (r Refresher) generator(ctx context.Context) <-chan models.Pokemon {
 	out := make(chan models.Pokemon)
-
 	go func() {
-		pokemons, err := r.Read()
-
-		if err != nil {
-			panic(err)
-		}
-
-		for _, pokemon := range pokemons {
-			out <- pokemon
-		}
-
 		defer close(out)
+		pokemons, err := r.Read()
+		if err == nil {
+			for _, pokemon := range pokemons {
+				out <- pokemon
+			}
+		}
 
 	}()
 
@@ -111,14 +106,8 @@ func fanIn(inputs ...<-chan models.Pokemon) <-chan models.Pokemon {
 
 	for _, in := range inputs {
 		go func(ch <-chan models.Pokemon) {
-			for {
-				value, ok := <-ch
-
-				if !ok {
-					wg.Done()
-					break
-				}
-
+			defer wg.Done()
+			for value := range ch {
 				out <- value
 			}
 		}(in)
