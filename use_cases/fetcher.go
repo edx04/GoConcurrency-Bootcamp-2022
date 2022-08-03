@@ -33,11 +33,11 @@ func NewFetcher(api api, storage writer) Fetcher {
 func (f Fetcher) Fetch(from, to int) error {
 	var pokemons []models.Pokemon
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	ch := f.generator(ctx, from, to)
 	for result := range ch {
 		if result.Error != nil {
+			cancel()
 			return result.Error
 		}
 		pokemons = append(pokemons, result.Pokemon)
